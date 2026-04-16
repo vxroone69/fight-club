@@ -9,14 +9,6 @@ const sphereSchema = new mongoose.Schema({
   desc: String,
 }, { _id: false });
 
-// Log entry schema
-const logEntrySchema = new mongoose.Schema({
-  date: String, // Format: YYYY-MM-DD
-  sphereId: String,
-  completed: Boolean,
-  notes: String,
-}, { _id: false });
-
 // Note schema
 const noteSchema = new mongoose.Schema({
   id: String,

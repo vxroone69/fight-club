@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import SphereSetup from "./components/SphereSetup";
 import TodayView from "./components/TodayView";
 import CalendarView from "./components/CalendarView";
@@ -21,19 +21,27 @@ export default function App() {
   const [activeMember, setActiveMember] = useState(null);
   const [activeTab, setActiveTab] = useState("today");
   const [editingMember, setEditingMember] = useState(null);
-  const [loadingMembers, setLoadingMembers] = useState(false);
   const [useBackend, setUseBackend] = useState(!!getAuthToken());
+  const [toast, setToast] = useState(null);
+  const toastTimeoutRef = useRef(null);
 
-  // Fetch members from backend if authenticated
-  useEffect(() => {
-    if (useBackend && user) {
-      fetchMembersFromBackend();
-    }
-  }, [useBackend, user]);
+  const showToast = useCallback((message) => {
+    if (toastTimeoutRef.current) clearTimeout(toastTimeoutRef.current);
+    setToast(message);
+    toastTimeoutRef.current = setTimeout(() => setToast(null), 3000);
+  }, []);
 
-  const fetchMembersFromBackend = async () => {
+  const handleToggleSphereError = useCallback((previousMembers, errorMessage) => {
+    // Rollback to previous state
+    setMembers(previousMembers);
+    // Show error toast
+    showToast(errorMessage);
+  }, [showToast]);
+
+  const fetchMembersFromBackend = useCallback(async () => {
+    if (!useBackend || !user) return;
+    
     try {
-      setLoadingMembers(true);
       const response = await memberAPI.getMembers();
       if (response.members && response.members.length > 0) {
         // Convert backend format to local format
@@ -47,35 +55,62 @@ export default function App() {
       console.error("Failed to fetch members:", error);
       // Fall back to localStorage
       setUseBackend(false);
-    } finally {
-      setLoadingMembers(false);
     }
-  };
+  }, [useBackend, user]);
+
+  // Fetch members from backend if authenticated
+  useEffect(() => {
+    fetchMembersFromBackend();
+  }, [fetchMembersFromBackend]);
+
+  // Ref to store previous members for change detection
+  const prevMembersRef = useRef(null);
 
   // Save to backend or localStorage
   useEffect(() => {
-    const saveMembers = async () => {
-      if (useBackend && user) {
-        // Save to backend
-        try {
-          for (const member of members) {
-            await memberAPI.updateMember(member._id, {
-              spheres: member.spheres,
-              logs: member.logs,
-              notes: member.notes,
-              setupDone: member.setupDone,
-            });
-          }
-        } catch (error) {
-          console.error("Failed to save to backend:", error);
-        }
-      } else {
-        // Save to localStorage
-        members.forEach((m) => store.set(`fc2_${m.name}`, m));
-      }
-    };
+    const debounceTimer = setTimeout(() => {
+      const saveMembers = async () => {
+        if (useBackend && user) {
+          // Save to backend - only changed members
+          try {
+            const prevMembers = prevMembersRef.current || [];
+            const membersToUpdate = [];
 
-    saveMembers();
+            // Find which members changed
+            for (const currentMember of members) {
+              const prevMember = prevMembers.find((m) => m._id === currentMember._id);
+
+              // If member is new or data changed (deep equality check)
+              if (!prevMember || JSON.stringify(prevMember) !== JSON.stringify(currentMember)) {
+                membersToUpdate.push(currentMember);
+              }
+            }
+
+            // Update only changed members
+            for (const member of membersToUpdate) {
+              await memberAPI.updateMember(member._id, {
+                spheres: member.spheres,
+                logs: member.logs,
+                notes: member.notes,
+                setupDone: member.setupDone,
+              });
+            }
+          } catch (error) {
+            console.error("Failed to save to backend:", error);
+          }
+        } else {
+          // Save to localStorage
+          members.forEach((m) => store.set(`fc2_${m.name}`, m));
+        }
+
+        // Update previous members ref with deep copy
+        prevMembersRef.current = JSON.parse(JSON.stringify(members));
+      };
+
+      saveMembers();
+    }, 500);
+
+    return () => clearTimeout(debounceTimer);
   }, [members, useBackend, user]);
 
   function updateMember(updated) {
@@ -237,7 +272,7 @@ export default function App() {
             <div className="fade" key={`${activeMember}-${activeTab}`}>
               {activeTab==="today"&&(
                 <div style={{maxWidth:"600px",margin:"0 auto"}}>
-                  <TodayView member={member} onUpdate={updateMember}/>
+                  <TodayView member={member} onUpdate={updateMember} membersSnapshot={members} onToggleSphereError={handleToggleSphereError}/>
                   <button onClick={()=>setEditingMember(member)} title="Edit spheres"
                     style={{marginTop:20,background:"#111",border:"1px solid #1a1a1a",borderRadius:8,color:"#666",fontSize:13,padding:"10px 16px",cursor:"pointer",fontFamily:"'DM Mono',monospace",transition:"all 0.2s"}}>
                     EDIT SPHERES
@@ -261,6 +296,30 @@ export default function App() {
           )}
         </div>
       </div>
+
+      {/* Toast notification */}
+      {toast && (
+        <div style={{
+          position: "fixed",
+          bottom: 32,
+          left: "50%",
+          transform: "translateX(-50%)",
+          background: "#1a0a0a",
+          border: "1px solid #3a1a1a",
+          color: "#ff6666",
+          padding: "12px 20px",
+          borderRadius: 8,
+          fontFamily: "'DM Mono',monospace",
+          fontSize: 12,
+          letterSpacing: "0.05em",
+          zIndex: 1000,
+          animation: "fadeIn 0.25s ease",
+          maxWidth: "90%",
+          textAlign: "center",
+        }}>
+          {toast}
+        </div>
+      )}
     </>
   );
 }

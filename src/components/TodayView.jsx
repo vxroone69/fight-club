@@ -1,13 +1,27 @@
 import { localDateStr } from "../utils/dateUtils";
 import { scoreDay, totalMinutes, getStreak, formatMins } from "../utils/scoreUtils";
+import { memberAPI } from "../utils/api";
 
-export default function TodayView({ member, onUpdate }) {
+export default function TodayView({ member, onUpdate, membersSnapshot, onToggleSphereError }) {
   const today = localDateStr();
   const log = member.logs[today] || {};
 
-  function toggleSphere(id) {
-    const newLog = { ...log, [id]: { ...log[id], checked: !log[id]?.checked } };
+  function toggleSphere(sphereId) {
+    const newChecked = !log[sphereId]?.checked;
+    
+    // Snapshot current members for rollback
+    const previousMembers = membersSnapshot;
+    
+    // Optimistic state update
+    const newLog = { ...log, [sphereId]: { ...log[sphereId], checked: newChecked } };
     onUpdate({ ...member, logs: { ...member.logs, [today]: newLog } });
+    
+    // API call with specific log endpoint
+    memberAPI.updateLog(member._id, today, sphereId, newChecked).catch((error) => {
+      console.error("Failed to update log:", error);
+      // Rollback on error
+      onToggleSphereError(previousMembers, "Failed to update sphere. Changes reverted.");
+    });
   }
   function setMins(id, val) {
     const newLog = { ...log, [id]: { ...log[id], minutes: Math.max(0, parseInt(val) || 0) } };

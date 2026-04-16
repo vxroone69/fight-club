@@ -10,6 +10,12 @@ import {
   deleteNote,
 } from '../controllers/memberController.js';
 import { auth } from '../middleware/auth.js';
+import { validate } from '../middleware/validate.js';
+import {
+  updateMemberSchema,
+  updateLogSchema,
+  addNoteSchema,
+} from '../schemas/memberSchemas.js';
 
 const router = express.Router();
 
@@ -20,14 +26,14 @@ router.use(auth);
 router.get('/', getMembers);
 router.get('/:id', getMember);
 router.post('/', createMember);
-router.put('/:id', updateMember);
+router.put('/:id', validate(updateMemberSchema), updateMember);
 router.delete('/:id', deleteMember);
 
 // Logs
-router.put('/:id/log', updateLog);
+router.put('/:id/log', validate(updateLogSchema), updateLog);
 
 // Notes
-router.post('/:id/notes', addNote);
+router.post('/:id/notes', validate(addNoteSchema), addNote);
 router.delete('/:id/notes/:noteId', deleteNote);
 
 export default router;
