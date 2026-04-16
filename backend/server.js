@@ -41,7 +41,7 @@ app.get('/api/health', (req, res) => {
 });
 
 // Error handling middleware
-app.use((err, req, res) => {
+app.use((err, req, res, next) => { // eslint-disable-line no-unused-vars
   console.error(err.stack);
   res.status(500).json({ message: 'Internal server error' });
 });
@@ -54,7 +54,6 @@ mongoose
   })
   .catch((err) => {
     console.error('MongoDB connection error:', err);
-    process.exit(1);
   });
 
 // Start server
