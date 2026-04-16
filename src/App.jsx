@@ -4,24 +4,102 @@ import TodayView from "./components/TodayView";
 import CalendarView from "./components/CalendarView";
 import LeaderboardView from "./components/LeaderboardView";
 import NotesView from "./components/NotesView";
+import AuthView from "./components/AuthView";
 import { store } from "./utils/store";
+import { memberAPI, getAuthToken } from "./utils/api";
 import { MEMBERS_LIST, defaultMember } from "./constants/spheres";
 
 export default function App() {
+  const [user, setUser] = useState(() => {
+    const saved = localStorage.getItem("user");
+    return saved ? JSON.parse(saved) : null;
+  });
+  
   const [members, setMembers] = useState(() =>
     MEMBERS_LIST.map((name) => store.get(`fc2_${name}`) || defaultMember(name))
   );
   const [activeMember, setActiveMember] = useState(null);
   const [activeTab, setActiveTab] = useState("today");
   const [editingMember, setEditingMember] = useState(null);
+  const [loadingMembers, setLoadingMembers] = useState(false);
+  const [useBackend, setUseBackend] = useState(!!getAuthToken());
 
+  // Fetch members from backend if authenticated
   useEffect(() => {
-    members.forEach((m) => store.set(`fc2_${m.name}`, m));
-  }, [members]);
+    if (useBackend && user) {
+      fetchMembersFromBackend();
+    }
+  }, [useBackend, user]);
+
+  const fetchMembersFromBackend = async () => {
+    try {
+      setLoadingMembers(true);
+      const response = await memberAPI.getMembers();
+      if (response.members && response.members.length > 0) {
+        // Convert backend format to local format
+        const backendMembers = response.members.map(m => ({
+          ...m,
+          logs: m.logs ? Object.fromEntries(new Map(m.logs)) : {},
+        }));
+        setMembers(backendMembers);
+      }
+    } catch (error) {
+      console.error("Failed to fetch members:", error);
+      // Fall back to localStorage
+      setUseBackend(false);
+    } finally {
+      setLoadingMembers(false);
+    }
+  };
+
+  // Save to backend or localStorage
+  useEffect(() => {
+    const saveMembers = async () => {
+      if (useBackend && user) {
+        // Save to backend
+        try {
+          for (const member of members) {
+            await memberAPI.updateMember(member._id, {
+              spheres: member.spheres,
+              logs: member.logs,
+              notes: member.notes,
+              setupDone: member.setupDone,
+            });
+          }
+        } catch (error) {
+          console.error("Failed to save to backend:", error);
+        }
+      } else {
+        // Save to localStorage
+        members.forEach((m) => store.set(`fc2_${m.name}`, m));
+      }
+    };
+
+    saveMembers();
+  }, [members, useBackend, user]);
 
   function updateMember(updated) {
     setMembers((prev) => prev.map((m) => (m.name === updated.name ? updated : m)));
     setEditingMember(null);
+  }
+
+  const handleAuthSuccess = (userData) => {
+    setUser(userData);
+    setUseBackend(true);
+  };
+
+  const handleLogout = () => {
+    localStorage.removeItem("user");
+    localStorage.removeItem("authToken");
+    setUser(null);
+    setUseBackend(false);
+    setActiveMember(null);
+    setActiveTab("today");
+  };
+
+  // Show AuthView if not authenticated
+  if (!user) {
+    return <AuthView onAuthSuccess={handleAuthSuccess} />;
   }
 
   const member = activeMember ? members.find((m) => m.name === activeMember) : null;
@@ -111,7 +189,7 @@ export default function App() {
             </div>
 
             {/* Member Selector */}
-            <div style={{display:"flex",gap:8}}>
+            <div style={{display:"flex",gap:8,alignItems:"center"}}>
               {MEMBERS_LIST.map(name=>{
                 const isActive=activeMember===name;
                 return (
@@ -121,6 +199,10 @@ export default function App() {
                   </button>
                 );
               })}
+              <button onClick={handleLogout}
+                style={{background:"#1a0a0a",border:"1px solid #3a1a1a",color:"#ff6666",padding:"10px 16px",borderRadius:8,fontFamily:"'DM Mono',monospace",fontSize:12,fontWeight:500,letterSpacing:"0.08em",cursor:"pointer",transition:"all 0.2s",textTransform:"uppercase",marginLeft:8}}>
+                LOGOUT
+              </button>
             </div>
           </div>
 
