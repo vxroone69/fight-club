@@ -88,6 +88,7 @@ export default function App() {
 
             // Update only changed members
             for (const member of membersToUpdate) {
+              if (!member._id) continue;
               await memberAPI.updateMember(member._id, {
                 spheres: member.spheres,
                 logs: member.logs,
