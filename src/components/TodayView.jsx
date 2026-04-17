@@ -7,6 +7,10 @@ export default function TodayView({ member, onUpdate, membersSnapshot, onToggleS
   const log = member.logs[today] || {};
 
   function toggleSphere(sphereId) {
+    if (!member._id) {
+      console.warn("Member not yet synced with backend");
+      return;
+    }
     const newChecked = !log[sphereId]?.checked;
     
     // Snapshot current members for rollback

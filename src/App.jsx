@@ -22,6 +22,7 @@ export default function App() {
   const [activeTab, setActiveTab] = useState("today");
   const [editingMember, setEditingMember] = useState(null);
   const [useBackend, setUseBackend] = useState(!!getAuthToken());
+  const [membersLoading, setMembersLoading] = useState(true);
   const [toast, setToast] = useState(null);
   const toastTimeoutRef = useRef(null);
 
@@ -39,7 +40,10 @@ export default function App() {
   }, [showToast]);
 
   const fetchMembersFromBackend = useCallback(async () => {
-    if (!useBackend || !user) return;
+    if (!useBackend || !user) {
+      setMembersLoading(false);
+      return;
+    }
     
     try {
       const response = await memberAPI.getMembers();
@@ -55,6 +59,8 @@ export default function App() {
       console.error("Failed to fetch members:", error);
       // Fall back to localStorage
       setUseBackend(false);
+    } finally {
+      setMembersLoading(false);
     }
   }, [useBackend, user]);
 
@@ -136,6 +142,25 @@ export default function App() {
   // Show AuthView if not authenticated
   if (!user) {
     return <AuthView onAuthSuccess={handleAuthSuccess} />;
+  }
+
+  // Show loading screen while fetching members from backend
+  if (membersLoading) {
+    return (
+      <div style={{
+        minHeight: "100vh",
+        background: "#000",
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+        fontFamily: "'DM Mono',monospace",
+        color: "#444",
+        fontSize: 12,
+        letterSpacing: "0.2em",
+      }}>
+        LOADING...
+      </div>
+    );
   }
 
   const member = activeMember ? members.find((m) => m.name === activeMember) : null;
